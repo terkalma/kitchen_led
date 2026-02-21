@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>LED Kitchen</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: #1a1a2e;
+      color: #eee;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+    }
+
+    .card {
+      background: #16213e;
+      border-radius: 20px;
+      padding: 2.5rem 2rem;
+      width: 320px;
+      text-align: center;
+      box-shadow: 0 8px 32px rgba(0,0,0,.4);
+    }
+
+    h1 {
+      font-size: 1.4rem;
+      margin-bottom: .3rem;
+    }
+
+    .status {
+      font-size: .85rem;
+      color: #888;
+      margin-bottom: 1.8rem;
+      transition: color .3s;
+    }
+
+    .status.connected { color: #4ade80; }
+
+    /* Toggle switch */
+    .toggle-wrap {
+      display: flex;
+      justify-content: center;
+      margin-bottom: 1.8rem;
+    }
+
+    .toggle {
+      position: relative;
+      width: 120px;
+      height: 60px;
+    }
+
+    .toggle input { display: none; }
+
+    .toggle label {
+      display: block;
+      width: 100%;
+      height: 100%;
+      background: #333;
+      border-radius: 30px;
+      cursor: pointer;
+      transition: background .3s;
+    }
+
+    .toggle label::after {
+      content: "";
+      position: absolute;
+      top: 5px;
+      left: 5px;
+      width: 50px;
+      height: 50px;
+      background: #666;
+      border-radius: 50%;
+      transition: transform .3s, background .3s;
+    }
+
+    .toggle input:checked + label {
+      background: #fbbf24;
+    }
+
+    .toggle input:checked + label::after {
+      transform: translateX(60px);
+      background: #fff;
+    }
+
+    .toggle input:disabled + label {
+      opacity: .4;
+      cursor: not-allowed;
+    }
+
+    /* Color picker */
+    .color-picker {
+      margin-bottom: 1.8rem;
+    }
+
+    .color-picker label {
+      display: block;
+      font-size: .85rem;
+      margin-bottom: .5rem;
+      color: #aaa;
+    }
+
+    input[type="color"] {
+      -webkit-appearance: none;
+      border: 2px solid #333;
+      border-radius: 10px;
+      width: 64px;
+      height: 40px;
+      cursor: pointer;
+      background: transparent;
+      padding: 2px;
+    }
+
+    input[type="color"]::-webkit-color-swatch-wrapper {
+      padding: 0;
+    }
+
+    input[type="color"]::-webkit-color-swatch {
+      border: none;
+      border-radius: 8px;
+    }
+
+    input[type="color"]:disabled {
+      opacity: .4;
+      cursor: not-allowed;
+    }
+
+    /* Brightness slider */
+    .brightness {
+      margin-bottom: 2rem;
+    }
+
+    .brightness label {
+      display: block;
+      font-size: .85rem;
+      margin-bottom: .5rem;
+      color: #aaa;
+    }
+
+    input[type="range"] {
+      -webkit-appearance: none;
+      width: 100%;
+      height: 6px;
+      border-radius: 3px;
+      background: #333;
+      outline: none;
+    }
+
+    input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 22px;
+      height: 22px;
+      border-radius: 50%;
+      background: #fbbf24;
+      cursor: pointer;
+    }
+
+    input[type="range"]:disabled {
+      opacity: .4;
+    }
+
+    /* Connect button */
+    button {
+      background: #0f3460;
+      color: #eee;
+      border: none;
+      border-radius: 12px;
+      padding: .8rem 2rem;
+      font-size: 1rem;
+      cursor: pointer;
+      transition: background .2s;
+      width: 100%;
+    }
+
+    button:hover { background: #1a4a7a; }
+    button:active { background: #0a2540; }
+    button.disconnect { background: #7f1d1d; }
+    button.disconnect:hover { background: #991b1b; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>💡 LED Kitchen</h1>
+    <p class="status" id="status">Not connected</p>
+
+    <div class="toggle-wrap">
+      <div class="toggle">
+        <input type="checkbox" id="onoff" disabled />
+        <label for="onoff"></label>
+      </div>
+    </div>
+
+    <div class="color-picker">
+      <label for="color">Color</label>
+      <input type="color" id="color" value="#ffffff" disabled />
+    </div>
+
+    <div class="brightness">
+      <label for="bright">Brightness: <span id="brightVal">100</span>%</label>
+      <input type="range" id="bright" min="0" max="100" value="100" disabled />
+    </div>
+
+    <button id="connectBtn">Connect via Bluetooth</button>
+  </div>
+
+  <script>
+    const SERVICE_UUID        = '12345678-1234-1234-1234-123456789abc';
+    const CHAR_ON_OFF_UUID    = '12345678-1234-1234-1234-123456789abd';
+    const CHAR_BRIGHT_UUID    = '12345678-1234-1234-1234-123456789abe';
+    const CHAR_COLOR_UUID     = '12345678-1234-1234-1234-123456789abf';
+
+    const statusEl   = document.getElementById('status');
+    const onoffEl    = document.getElementById('onoff');
+    const brightEl   = document.getElementById('bright');
+    const brightVal  = document.getElementById('brightVal');
+    const colorEl    = document.getElementById('color');
+    const connectBtn = document.getElementById('connectBtn');
+
+    let device, server, service;
+    let charOnOff, charBright, charColor;
+
+    const enc = new TextEncoder();
+    const dec = new TextDecoder();
+
+    connectBtn.addEventListener('click', async () => {
+      if (device && device.gatt.connected) {
+        device.gatt.disconnect();
+        return;
+      }
+      try {
+        statusEl.textContent = 'Scanning…';
+        device = await navigator.bluetooth.requestDevice({
+          filters: [{ name: 'LED Kitchen' }],
+          optionalServices: [SERVICE_UUID]
+        });
+
+        device.addEventListener('gattserverdisconnected', onDisconnect);
+
+        statusEl.textContent = 'Connecting…';
+        server  = await device.gatt.connect();
+        service = await server.getPrimaryService(SERVICE_UUID);
+
+        charOnOff  = await service.getCharacteristic(CHAR_ON_OFF_UUID);
+        charBright = await service.getCharacteristic(CHAR_BRIGHT_UUID);
+        charColor  = await service.getCharacteristic(CHAR_COLOR_UUID);
+
+        // Read current state
+        const onOffVal = dec.decode(await charOnOff.readValue());
+        onoffEl.checked = onOffVal === '1';
+
+        const bVal = dec.decode(await charBright.readValue());
+        const pct  = Math.round((parseInt(bVal) / 255) * 100);
+        brightEl.value   = pct;
+        brightVal.textContent = pct;
+
+        const colorRaw = await charColor.readValue();
+        const r = colorRaw.getUint8(0), g = colorRaw.getUint8(1), b = colorRaw.getUint8(2);
+        colorEl.value = '#' + [r,g,b].map(c => c.toString(16).padStart(2,'0')).join('');
+
+        // Enable controls
+        onoffEl.disabled = false;
+        brightEl.disabled = false;
+        colorEl.disabled = false;
+        statusEl.textContent = 'Connected';
+        statusEl.classList.add('connected');
+        connectBtn.textContent = 'Disconnect';
+        connectBtn.classList.add('disconnect');
+
+      } catch (err) {
+        console.error(err);
+        statusEl.textContent = 'Connection failed';
+      }
+    });
+
+    function onDisconnect() {
+      onoffEl.disabled  = true;
+      brightEl.disabled = true;
+      colorEl.disabled  = true;
+      statusEl.textContent = 'Disconnected';
+      statusEl.classList.remove('connected');
+      connectBtn.textContent = 'Connect via Bluetooth';
+      connectBtn.classList.remove('disconnect');
+    }
+
+    onoffEl.addEventListener('change', async () => {
+      const val = onoffEl.checked ? '1' : '0';
+      await charOnOff.writeValue(enc.encode(val));
+    });
+
+    let brightTimeout;
+    brightEl.addEventListener('input', () => {
+      brightVal.textContent = brightEl.value;
+      clearTimeout(brightTimeout);
+      brightTimeout = setTimeout(async () => {
+        const byteVal = Math.round((brightEl.value / 100) * 255);
+        await charBright.writeValue(enc.encode(String(byteVal)));
+      }, 100);
+    });
+
+    let colorTimeout;
+    colorEl.addEventListener('input', () => {
+      clearTimeout(colorTimeout);
+      colorTimeout = setTimeout(async () => {
+        const hex = colorEl.value;
+        const r = parseInt(hex.slice(1,3), 16);
+        const g = parseInt(hex.slice(3,5), 16);
+        const b = parseInt(hex.slice(5,7), 16);
+        await charColor.writeValue(new Uint8Array([r, g, b]));
+      }, 100);
+    });
+  </script>
+</body>
+</html>
