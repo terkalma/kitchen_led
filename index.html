@@ -317,9 +317,7 @@
     async function updateLastMotion() {
       try {
         const motionSecs = parseInt(dec.decode(await charLastMotion.readValue())) || 0;
-        lastMotionEl.textContent = motionSecs > 0
-          ? 'Last motion: ' + formatDuration(motionSecs) + ' ago'
-          : 'No motion detected yet';
+        lastMotionEl.textContent = 'Last motion: ' + formatDuration(motionSecs) + ' ago';
       } catch (e) { /* ignore read errors during disconnect */ }
     }
 
