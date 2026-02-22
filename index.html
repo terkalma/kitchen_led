@@ -230,7 +230,8 @@
     const lastMotionEl = document.getElementById('lastMotion');
 
     let device, server, service;
-    let charOnOff, charBright, charColor;
+    let charOnOff, charBright, charColor, charLastMotion;
+    let motionPollInterval = null;
 
     const enc = new TextEncoder();
     const dec = new TextDecoder();
@@ -271,11 +272,11 @@
         colorEl.value = '#' + [r,g,b].map(c => c.toString(16).padStart(2,'0')).join('');
 
         // Read last motion
-        const charLastMotion = await service.getCharacteristic(CHAR_LAST_MOTION_UUID);
-        const motionSecs = parseInt(dec.decode(await charLastMotion.readValue())) || 0;
-        lastMotionEl.textContent = motionSecs > 0
-          ? 'Last motion: ' + formatDuration(motionSecs) + ' ago'
-          : 'No motion detected yet';
+        charLastMotion = await service.getCharacteristic(CHAR_LAST_MOTION_UUID);
+        await updateLastMotion();
+
+        // Poll last motion every 5 seconds
+        motionPollInterval = setInterval(updateLastMotion, 5000);
 
         // Enable controls
         onoffEl.disabled = false;
@@ -293,6 +294,7 @@
     });
 
     function onDisconnect() {
+      if (motionPollInterval) { clearInterval(motionPollInterval); motionPollInterval = null; }
       onoffEl.disabled  = true;
       brightEl.disabled = true;
       colorEl.disabled  = true;
@@ -310,6 +312,15 @@
       if (m < 60) return m + 'm ' + s + 's';
       const h = Math.floor(m / 60);
       return h + 'h ' + (m % 60) + 'm';
+    }
+
+    async function updateLastMotion() {
+      try {
+        const motionSecs = parseInt(dec.decode(await charLastMotion.readValue())) || 0;
+        lastMotionEl.textContent = motionSecs > 0
+          ? 'Last motion: ' + formatDuration(motionSecs) + ' ago'
+          : 'No motion detected yet';
+      } catch (e) { /* ignore read errors during disconnect */ }
     }
 
     onoffEl.addEventListener('change', async () => {
