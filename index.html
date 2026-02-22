@@ -179,6 +179,12 @@
     button:active { background: #0a2540; }
     button.disconnect { background: #7f1d1d; }
     button.disconnect:hover { background: #991b1b; }
+
+    .last-motion {
+      font-size: .8rem;
+      color: #888;
+      margin-top: 1.2rem;
+    }
   </style>
 </head>
 <body>
@@ -204,6 +210,8 @@
     </div>
 
     <button id="connectBtn">Connect via Bluetooth</button>
+
+    <p class="last-motion" id="lastMotion"></p>
   </div>
 
   <script>
@@ -211,6 +219,7 @@
     const CHAR_ON_OFF_UUID    = '12345678-1234-1234-1234-123456789abd';
     const CHAR_BRIGHT_UUID    = '12345678-1234-1234-1234-123456789abe';
     const CHAR_COLOR_UUID     = '12345678-1234-1234-1234-123456789abf';
+    const CHAR_LAST_MOTION_UUID = '12345678-1234-1234-1234-123456789ac0';
 
     const statusEl   = document.getElementById('status');
     const onoffEl    = document.getElementById('onoff');
@@ -218,6 +227,7 @@
     const brightVal  = document.getElementById('brightVal');
     const colorEl    = document.getElementById('color');
     const connectBtn = document.getElementById('connectBtn');
+    const lastMotionEl = document.getElementById('lastMotion');
 
     let device, server, service;
     let charOnOff, charBright, charColor;
@@ -260,6 +270,13 @@
         const r = colorRaw.getUint8(0), g = colorRaw.getUint8(1), b = colorRaw.getUint8(2);
         colorEl.value = '#' + [r,g,b].map(c => c.toString(16).padStart(2,'0')).join('');
 
+        // Read last motion
+        const charLastMotion = await service.getCharacteristic(CHAR_LAST_MOTION_UUID);
+        const motionSecs = parseInt(dec.decode(await charLastMotion.readValue())) || 0;
+        lastMotionEl.textContent = motionSecs > 0
+          ? 'Last motion: ' + formatDuration(motionSecs) + ' ago'
+          : 'No motion detected yet';
+
         // Enable controls
         onoffEl.disabled = false;
         brightEl.disabled = false;
@@ -283,6 +300,16 @@
       statusEl.classList.remove('connected');
       connectBtn.textContent = 'Connect via Bluetooth';
       connectBtn.classList.remove('disconnect');
+      lastMotionEl.textContent = '';
+    }
+
+    function formatDuration(secs) {
+      if (secs < 60) return secs + 's';
+      const m = Math.floor(secs / 60);
+      const s = secs % 60;
+      if (m < 60) return m + 'm ' + s + 's';
+      const h = Math.floor(m / 60);
+      return h + 'h ' + (m % 60) + 'm';
     }
 
     onoffEl.addEventListener('change', async () => {
